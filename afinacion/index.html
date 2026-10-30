@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrenador de afinación</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Panel de estudio: fondo grafito, aguja de bronce, zonas de afinación con color de semáforo. Un solo tema oscuro, a propósito. */
+:root {
+  --bg: #11151b;
+  --panel: #1a2029;
+  --panel2: #222a36;
+  --line: #313b49;
+  --fg: #ece6da;
+  --muted: #9ba4ae;
+  --brass: #e3a63d;
+  --ok: #4cbf98;
+  --warn: #e3c04f;
+  --bad: #e46a5c;
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.45; }
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+.app { max-width: 760px; margin: 0 auto; padding-block: 20px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 20px; }
+header.barra { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.marca { font-family: var(--display); font-weight: 700; font-size: 1.6rem; letter-spacing: .02em; text-transform: uppercase; }
+.marca small { display: block; font-family: var(--body); font-weight: 500; font-size: .85rem; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.pastilla { font-size: .85rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.pastilla.on { color: var(--ok); border-color: var(--ok); }
+
+h2 { font-family: var(--display); font-weight: 600; font-size: 1.35rem; letter-spacing: .03em; text-transform: uppercase; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.chico { font-size: .9rem; color: var(--muted); }
+.etiqueta { font-family: var(--display); font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* Punto de partida */
+.partida { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.cifra { display: flex; flex-direction: column; gap: 2px; }
+.cifra b { font-family: var(--display); font-size: 2.1rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.cifra b.meta { color: var(--ok); }
+.cifra b.hoy { color: var(--brass); }
+
+.boton { border: 0; border-radius: 8px; padding: 12px 18px; font-weight: 600; background: var(--panel2); border: 1px solid var(--line); }
+.boton.principal { background: var(--brass); color: #1a1408; border-color: var(--brass); }
+.boton.chico { padding: 8px 12px; font-size: .9rem; }
+.fila { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+.ejercicios { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 560px) { .ejercicios, .partida { grid-template-columns: 1fr; } }
+.tarjeta { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tarjeta:hover { border-color: var(--brass); }
+.tarjeta .num { font-family: var(--display); color: var(--brass); font-weight: 700; letter-spacing: .08em; }
+.tarjeta h3 { margin: 0; font-family: var(--display); font-size: 1.3rem; font-weight: 600; }
+.tarjeta .hecho { font-size: .85rem; color: var(--ok); }
+
+/* Pantalla de ejercicio */
+.cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.objetivo { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.objetivo .nota { font-family: var(--display); font-weight: 700; font-size: 4rem; line-height: 1; }
+.objetivo .detalle { color: var(--muted); }
+.estado { font-family: var(--display); font-size: 1.6rem; font-weight: 600; letter-spacing: .02em; min-height: 2.2rem; }
+.estado.canta { color: var(--brass); }
+.resultado { min-height: 3em; font-size: 1.05rem; }
+.resultado b { font-family: var(--display); font-size: 1.25rem; }
+
+.medidor { position: relative; height: 54px; border-radius: 8px; border: 1px solid var(--line); overflow: hidden;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bad) 30%, var(--panel)) 0 10%, color-mix(in srgb, var(--warn) 25%, var(--panel)) 10% 25%, color-mix(in srgb, var(--ok) 30%, var(--panel)) 25% 75%, color-mix(in srgb, var(--warn) 25%, var(--panel)) 75% 90%, color-mix(in srgb, var(--bad) 30%, var(--panel)) 90% 100%); }
+.medidor .centro { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--fg); opacity: .35; }
+.medidor .aguja { position: absolute; top: 4px; bottom: 4px; width: 6px; margin-left: -3px; border-radius: 3px; background: var(--brass); left: 50%; transition: left 60ms linear; box-shadow: 0 0 10px color-mix(in srgb, var(--brass) 60%, transparent); }
+.medidor .aguja.apagada { opacity: .15; }
+.escala { display: flex; justify-content: space-between; font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.velo { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--panel2); font-family: var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+
+canvas.rastro { width: 100%; height: 190px; display: block; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line); }
+.puntos { display: flex; gap: 6px; flex-wrap: wrap; }
+.punto { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); }
+.punto.ok { background: var(--ok); border-color: var(--ok); }
+.punto.casi { background: var(--warn); border-color: var(--warn); }
+.punto.mal { background: var(--bad); border-color: var(--bad); }
+.punto.actual { border-color: var(--brass); }
+
+.resumen b.grande { font-family: var(--display); font-size: 3rem; font-weight: 700; line-height: 1; color: var(--brass); font-variant-numeric: tabular-nums; }
+
+/* Afinador libre */
+.lectura { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.lectura .nota { font-family: var(--display); font-weight: 700; font-size: 5rem; line-height: 1; }
+.lectura .cents { font-family: var(--display); font-size: 2rem; font-variant-numeric: tabular-nums; }
+canvas.rollo { width: 100%; height: 300px; display: block; background: var(--panel2); border-radius: 8px; border: 1px solid var(--line); }
+
+/* Progreso */
+.tabla { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.tabla th, .tabla td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); font-size: .95rem; }
+.tabla th { font-family: var(--display); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-size: .8rem; }
+.barrita { height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; min-width: 60px; }
+.barrita i { display: block; height: 100%; background: var(--brass); }
+.aviso { border-left: 3px solid var(--bad); padding-left: 10px; }
+@media (prefers-reduced-motion: reduce) { .medidor .aguja { transition: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="barra">
+    <div class="marca">Entrenador de afinación<small>Primer tiro, pasos, entradas y puntas</small></div>
+    <span class="pastilla" id="estadoMic">Micrófono apagado</span>
+  </header>
+
+  <!-- INICIO -->
+  <section id="inicio" class="app" style="padding:0">
+    <div class="panel">
+      <span class="etiqueta">Tu punto de partida (grabaciones 2024-2025)</span>
+      <div class="partida">
+        <div class="cifra"><b class="hoy">5 de 10</b><span class="chico">notas afinadas en tus temas</span></div>
+        <div class="cifra"><b class="hoy">4 de 10</b><span class="chico">notas afinadas al entrar (después las corregís)</span></div>
+        <div class="cifra"><b class="meta">8 de 10</b><span class="chico">la meta: así suena alguien afinado</span></div>
+      </div>
+    </div>
+
+    <div class="panel" id="panelMic">
+      <h2>Antes de arrancar</h2>
+      <p>En la compu usá Google Chrome; en el iPhone, Safari. Buscá un lugar tranquilo y, si podés, usá auriculares para escuchar la nota de referencia. Cuando te pregunte por el micrófono, tocá <b>Permitir</b>.</p>
+      <div class="fila"><button class="boton principal" id="btnMic">Activar micrófono</button></div>
+      <p class="chico aviso" id="errorMic" hidden></p>
+    </div>
+
+    <div class="fila" style="justify-content:space-between">
+      <h2>Rutina de hoy · 15 minutos</h2>
+      <span class="chico" id="hechosHoy"></span>
+    </div>
+    <div class="ejercicios" id="listaEjercicios"></div>
+
+    <div class="ejercicios">
+      <button class="tarjeta" id="btnAfinador">
+        <span class="num">LIBRE</span>
+        <h3>Afinador</h3>
+        <p class="chico">Cantá lo que quieras y mirá la nota en vivo. Sirve para calentar 2 minutos o para revisar un pedazo de un tema.</p>
+      </button>
+      <button class="tarjeta" id="btnProgreso">
+        <span class="num">SEMANA A SEMANA</span>
+        <h3>Tu progreso</h3>
+        <p class="chico">Cada ronda queda guardada en esta compu. Mirá cómo suben tus aciertos.</p>
+      </button>
+    </div>
+  </section>
+
+  <!-- EJERCICIO -->
+  <section id="ejercicio" class="app" style="padding:0" hidden>
+    <div class="cabeza">
+      <div>
+        <span class="etiqueta" id="ejNumero"></span>
+        <h2 id="ejTitulo"></h2>
+        <p class="chico" id="ejConsejo"></p>
+      </div>
+      <button class="boton chico" id="btnSalir">Salir</button>
+    </div>
+
+    <div class="panel" id="panelIntento">
+      <div class="objetivo"><span class="nota" id="notaObjetivo">—</span><span class="detalle" id="detalleObjetivo"></span></div>
+      <div class="estado" id="estado">Preparate…</div>
+      <div>
+        <div class="medidor" id="medidor"><div class="centro"></div><div class="aguja" id="aguja"></div><div class="velo" id="velo" hidden>A ciegas: el tiro sale de tu oído</div></div>
+        <div class="escala"><span>50 abajo</span><span>25</span><span>centro</span><span>25</span><span>50 arriba</span></div>
+      </div>
+      <canvas class="rastro" id="rastro"></canvas>
+      <p class="resultado" id="resultado"></p>
+      <div class="puntos" id="puntos"></div>
+    </div>
+
+    <div class="panel resumen" id="panelResumen" hidden>
+      <span class="etiqueta">Fin de la ronda</span>
+      <div class="fila"><b class="grande" id="resAciertos"></b><span id="resTexto"></span></div>
+      <p id="resConsejo"></p>
+      <div class="fila"><button class="boton principal" id="btnOtra">Otra ronda</button><button class="boton" id="btnVolver">Volver al inicio</button></div>
+    </div>
+  </section>
+
+  <!-- AFINADOR LIBRE -->
+  <section id="afinador" class="app" style="padding:0" hidden>
+    <div class="cabeza">
+      <div><span class="etiqueta">Libre</span><h2>Afinador</h2><p class="chico">La línea muestra tus últimos segundos. Verde: afinada. Amarillo: en el borde. Rojo: se nota.</p></div>
+      <button class="boton chico" id="btnSalirAfinador">Salir</button>
+    </div>
+    <div class="panel">
+      <div class="lectura"><span class="nota" id="libreNota">—</span><span class="cents" id="libreCents"></span></div>
+      <div>
+        <div class="medidor"><div class="centro"></div><div class="aguja" id="libreAguja"></div></div>
+        <div class="escala"><span>50 abajo</span><span>25</span><span>centro</span><span>25</span><span>50 arriba</span></div>
+      </div>
+      <canvas class="rollo" id="rollo"></canvas>
+    </div>
+  </section>
+
+  <!-- PROGRESO -->
+  <section id="progreso" class="app" style="padding:0" hidden>
+    <div class="cabeza">
+      <div><span class="etiqueta">Semana a semana</span><h2>Tu progreso</h2><p class="chico">Aciertos por ronda (de 10). La meta es llegar a 8 en todos.</p></div>
+      <button class="boton chico" id="btnSalirProgreso">Salir</button>
+    </div>
+    <div id="tablasProgreso" class="app" style="padding:0"></div>
+  </section>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- Notas ---------- */
+const NOMBRES = ["Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si"];
+const midiAHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+const hzAMidi = (f) => 69 + 12 * Math.log2(f / 440);
+const nombreNota = (m) => NOMBRES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
+
+// Diferencia en cents contra la nota objetivo, sin importar la octava (-600..600)
+function centsPlegados(hz, objetivoMidi) {
+  const c = (hzAMidi(hz) - objetivoMidi) * 100;
+  return ((c % 1200) + 1800) % 1200 - 600;
+}
+function mediana(a) {
+  if (!a.length) return NaN;
+  const s = [...a].sort((x, y) => x - y);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+function clase(c) {
+  const a = Math.abs(c);
+  return a <= 25 ? "ok" : a <= 40 ? "casi" : "mal";
+}
+const redondo = (x) => Math.round(Math.abs(x));
+const lado = (c) => (c < 0 ? "abajo" : "arriba");
+
+/* ---------- Detección de altura (YIN) ---------- */
+function detectarAltura(buf, sr) {
+  const n = buf.length >> 1;
+  const x = new Float32Array(n);
+  for (let i = 0; i < n; i++) x[i] = 0.5 * (buf[2 * i] + buf[2 * i + 1]);
+  const fs = sr / 2;
+  const tauMin = Math.floor(fs / 1000);
+  const tauMax = Math.min(Math.floor(fs / 65), n >> 1);
+  const W = n - tauMax - 1;
+  const d = new Float32Array(tauMax + 2);
+  for (let tau = 1; tau <= tauMax + 1; tau++) {
+    let s = 0;
+    for (let i = 0; i < W; i++) { const v = x[i] - x[i + tau]; s += v * v; }
+    d[tau] = s;
+  }
+  const dn = new Float32Array(tauMax + 2);
+  dn[0] = 1;
+  let acum = 0;
+  for (let tau = 1; tau <= tauMax + 1; tau++) { acum += d[tau]; dn[tau] = acum > 0 ? (d[tau] * tau) / acum : 1; }
+  let tau = -1;
+  for (let t = tauMin; t <= tauMax; t++) {
+    if (dn[t] < 0.15) {
+      while (t + 1 <= tauMax && dn[t + 1] < dn[t]) t++;
+      tau = t;
+      break;
+    }
+  }
+  if (tau < 1) return { hz: 0, conf: 0 };
+  const a = dn[tau - 1], b = dn[tau], c = dn[tau + 1];
+  const den = a - 2 * b + c;
+  const corr = den !== 0 ? (0.5 * (a - c)) / den : 0;
+  return { hz: fs / (tau + corr), conf: 1 - b };
+}
+
+/* ---------- Micrófono y sonido ---------- */
+const motor = {
+  ctx: null, sr: 48000, ruido: 0.004, oyentes: new Set(), onda: null, volumen: 0.22,
+  async iniciar() {
+    if (!navigator.mediaDevices) throw new Error("sin micrófono en este navegador");
+    // El iPhone solo deja arrancar el sonido dentro del toque: el contexto se crea antes de esperar el permiso
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const arranque = ctx.resume();
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    } catch (err) {
+      ctx.close();
+      throw err;
+    }
+    await arranque;
+    this.ctx = ctx;
+    this.sr = this.ctx.sampleRate;
+    const fuente = this.ctx.createMediaStreamSource(stream);
+    // Mide al ritmo del audio (cada 1024 muestras, ~47 veces por segundo), aunque la pantalla esté tapada
+    const proc = this.ctx.createScriptProcessor(1024, 1, 1);
+    const ventana = new Float32Array(2048);
+    proc.onaudioprocess = (ev) => {
+      const nuevo = ev.inputBuffer.getChannelData(0);
+      ventana.copyWithin(0, nuevo.length);
+      ventana.set(nuevo, ventana.length - nuevo.length);
+      this.leer(ventana, Number.isFinite(ev.playbackTime) ? ev.playbackTime * 1000 : performance.now());
+    };
+    const mudo = this.ctx.createGain();
+    mudo.gain.value = 0;
+    fuente.connect(proc);
+    proc.connect(mudo).connect(this.ctx.destination);
+    this.proc = proc;
+    const n = 9, real = new Float32Array(n), imag = new Float32Array(n);
+    for (let k = 1; k < n; k++) imag[k] = 1 / Math.pow(k, 1.4);
+    this.onda = this.ctx.createPeriodicWave(real, imag);
+  },
+  leer(buf, t) {
+    let s = 0;
+    for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+    const rms = Math.sqrt(s / buf.length);
+    const { hz, conf } = detectarAltura(buf, this.sr);
+    const voz = hz >= 65 && hz <= 1000 && conf > 0.85 && rms > this.ruido * 3 + 0.003;
+    if (!voz) this.ruido = Math.min(0.05, 0.97 * this.ruido + 0.03 * rms);
+    const f = { t, rms, hz: voz ? hz : 0, voz };
+    this.oyentes.forEach((fn) => fn(f));
+  },
+  tocar(midi, ms) {
+    const ctx = this.ctx, t0 = ctx.currentTime + 0.02, dur = ms / 1000;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(this.volumen, t0 + 0.03);
+    g.gain.setValueAtTime(this.volumen, t0 + dur - 0.12);
+    g.gain.linearRampToValueAtTime(0, t0 + dur);
+    const o = ctx.createOscillator();
+    o.setPeriodicWave(this.onda);
+    o.frequency.value = midiAHz(midi);
+    o.connect(g).connect(ctx.destination);
+    o.start(t0);
+    o.stop(t0 + dur + 0.05);
+    return esperar(ms + 80);
+  },
+};
+
+class Cancelado extends Error {}
+let corrida = { cancelada: false };
+function esperar(ms) {
+  const yo = corrida;
+  return new Promise((res, rej) => setTimeout(() => (yo.cancelada ? rej(new Cancelado()) : res()), ms));
+}
+
+// Espera que empieces a cantar y junta lo que cantás durante `duracionMs` desde ese momento.
+function capturar(duracionMs, esperaMaxMs, alAvanzar) {
+  const yo = corrida;
+  return new Promise((resolve, reject) => {
+    let inicio = null, entrada = null, previo = null;
+    const frames = [];
+    const terminar = (valor, error) => { motor.oyentes.delete(fn); error ? reject(error) : resolve(valor); };
+    const fn = (f) => {
+      if (yo.cancelada) return terminar(null, new Cancelado());
+      if (inicio === null) inicio = f.t;
+      if (entrada === null) {
+        if (f.voz && previo && previo.voz) {
+          entrada = previo.t;
+          frames.push({ ms: 0, hz: previo.hz }, { ms: f.t - entrada, hz: f.hz });
+        } else if (f.t - inicio > esperaMaxMs) {
+          return terminar(null);
+        }
+        previo = f;
+        return;
+      }
+      const ms = f.t - entrada;
+      if (f.voz) frames.push({ ms, hz: f.hz });
+      if (alAvanzar) alAvanzar(ms, f);
+      if (ms >= duracionMs) terminar({ frames });
+    };
+    motor.oyentes.add(fn);
+  });
+}
+
+/* ---------- Dibujo ---------- */
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function prepararCanvas(cv) {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.max(1, Math.round(r.width * dpr));
+  cv.height = Math.max(1, Math.round(r.height * dpr));
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { g, w: r.width, h: r.height };
+}
+
+// Rastro de un intento: puntos {ms, c} en cents contra el objetivo; `lineas` marca las notas buscadas.
+function dibujarRastro(cv, puntos, { duracionMs, rango = 150, lineas = [{ c: 0, texto: "objetivo" }], ventana = null }) {
+  const { g, w, h } = prepararCanvas(cv);
+  const izq = 44, der = 8, arr = 10, aba = 18;
+  const X = (ms) => izq + (Math.min(ms, duracionMs) / duracionMs) * (w - izq - der);
+  const Y = (c) => arr + ((rango - Math.max(-rango, Math.min(rango, c))) / (2 * rango)) * (h - arr - aba);
+  g.clearRect(0, 0, w, h);
+  g.font = "12px " + css("--body");
+  if (ventana) {
+    g.fillStyle = "rgba(227,166,61,0.10)";
+    g.fillRect(X(ventana[0]), arr, X(ventana[1]) - X(ventana[0]), h - arr - aba);
+  }
+  for (const l of lineas) {
+    g.fillStyle = "rgba(76,191,152,0.16)";
+    g.fillRect(izq, Y(l.c + 25), w - izq - der, Y(l.c - 25) - Y(l.c + 25));
+    g.strokeStyle = css("--ok");
+    g.lineWidth = 1;
+    g.beginPath(); g.moveTo(izq, Y(l.c)); g.lineTo(w - der, Y(l.c)); g.stroke();
+    g.fillStyle = css("--muted");
+    g.textAlign = "right";
+    g.fillText(l.texto, izq - 4, Y(l.c) + 4);
+  }
+  g.fillStyle = css("--muted");
+  g.textAlign = "left";
+  g.fillText("0 s", izq, h - 4);
+  g.textAlign = "right";
+  g.fillText((duracionMs / 1000).toFixed(1).replace(".", ",") + " s", w - der, h - 4);
+  g.strokeStyle = css("--brass");
+  g.lineWidth = 2.5;
+  g.beginPath();
+  let ant = null;
+  for (const p of puntos) {
+    if (ant && p.ms - ant.ms < 60) g.lineTo(X(p.ms), Y(p.c));
+    else g.moveTo(X(p.ms), Y(p.c));
+    ant = p;
+  }
+  g.stroke();
+}
+
+/* ---------- Guardado ---------- */
+const CLAVE = "entrenador-afinacion-v1";
+function historial() {
+  try { return JSON.parse(localStorage.getItem(CLAVE) || "[]"); } catch { return []; }
+}
+function guardarRonda(r) {
+  try { const h = historial(); h.push(r); localStorage.setItem(CLAVE, JSON.stringify(h)); } catch { /* sin guardado: la ronda igual se muestra */ }
+}
+const diaLocal = (d) => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
+
+/* ---------- Ejercicios ---------- */
+const RANGO = { bajo: 52, alto: 64 };               // Mi3 a Mi4: tu rango cómodo
+const GRAVES = [47, 48, 49, 50, 51];                 // Si2 a Re#3
+const AGUDOS = [65, 66, 67, 68];                     // Fa4 a Sol#4
+const azar = (a) => a[Math.floor(Math.random() * a.length)];
+const notaEnRango = (evitar) => {
+  let m;
+  do { m = RANGO.bajo + Math.floor(Math.random() * (RANGO.alto - RANGO.bajo + 1)); } while (m === evitar);
+  return m;
+};
+
+const EJERCICIOS = [
+  {
+    id: "tiro", num: "1", titulo: "Primer tiro",
+    corrige: "Tu error principal: entrás afinado 4 de cada 10 veces.",
+    consejo: "Escuchá la nota, imaginala adentro tuyo y recién ahí cantá un \"na\". Cuenta solo cómo entrás, no cómo la acomodás después.",
+    async intento(prev) {
+      const m = notaEnRango(prev && prev.objetivo);
+      mostrarObjetivo(m, "Escuchá y cantá la misma nota");
+      return tiroSobre(m, "");
+    },
+  },
+  {
+    id: "paso", num: "2", titulo: "Medio paso o paso entero",
+    corrige: "Tus pasos salen casi siempre en el medio: ni medio paso ni paso entero.",
+    consejo: "Medio paso (semitono) = 100. Paso entero (tono) = 200. Cantá la primera, y cuando aparezca \"¡Cambiá!\" pasá a la segunda sin cortar.",
+    async intento() {
+      const paso = azar([1, 2]) * azar([1, -1]);
+      const a = paso > 0 ? notaEnRango() - 2 : notaEnRango() + 2;
+      const b = a + paso;
+      const tipo = Math.abs(paso) === 1 ? "medio paso" : "paso entero";
+      mostrarObjetivo(a, `${nombreNota(a)} → ${nombreNota(b)} · ${tipo} ${paso > 0 ? "arriba" : "abajo"}`);
+      fijarEstado("Escuchá las dos…");
+      await motor.tocar(a, 800);
+      await motor.tocar(b, 800);
+      await esperar(300);
+      fijarEstado("Cantá la primera", true);
+      const CAMBIO = 1200, TOTAL = 2600;
+      let avisado = false;
+      const r = await capturar(TOTAL, 7000, (ms, f) => {
+        if (!avisado && ms >= CAMBIO) { avisado = true; fijarEstado("¡Cambiá!", true); }
+        if (f.voz) moverAguja(centsPlegados(f.hz, ms < CAMBIO ? a : b));
+      });
+      if (!r) return null;
+      const fa = r.frames.filter((p) => p.ms >= 250 && p.ms <= 1050).map((p) => hzAMidi(p.hz));
+      const fb = r.frames.filter((p) => p.ms >= 1650 && p.ms <= 2450).map((p) => hzAMidi(p.hz));
+      if (fa.length < 5 || fb.length < 5) return { invalido: "No llegué a escuchar las dos notas. Sostené cada una cerca de un segundo." };
+      const ma = mediana(fa), mb = mediana(fb);
+      const hecho = (mb - ma) * 100, buscado = paso * 100, error = hecho - buscado;
+      const puntos = r.frames.map((p) => ({ ms: p.ms, c: (hzAMidi(p.hz) - ma) * 100 }));
+      dibujarRastro(lienzo, puntos, { duracionMs: TOTAL, rango: 300, lineas: [{ c: 0, texto: "1ª" }, { c: buscado, texto: "2ª" }] });
+      let texto;
+      if (Math.sign(hecho) !== Math.sign(paso) || Math.abs(hecho) < 20) texto = `Casi no te moviste o fuiste para el otro lado (hiciste ${Math.round(hecho)}).`;
+      else if (Math.abs(error) <= 25) texto = `<b>¡Justo!</b> Hiciste un paso de ${redondo(hecho)} (buscábamos ${Math.abs(buscado)}).`;
+      else texto = `Hiciste un paso de <b>${redondo(hecho)}</b> y el ${tipo} es ${Math.abs(buscado)}: ${Math.abs(hecho) > Math.abs(buscado) ? "te pasaste" : "te quedaste corto"} ${redondo(error)}.`;
+      return { objetivo: a, c: error, texto };
+    },
+  },
+  {
+    id: "ataque", num: "3", titulo: "Entrar sin deslizar",
+    corrige: "6 de cada 10 frases las arrancás deslizando desde abajo.",
+    consejo: "Cantá un \"ta\" corto y seco, justo en la nota, como si la tocaras con un dedo. Nada de subir desde abajo.",
+    async intento(prev) {
+      const m = notaEnRango(prev && prev.objetivo);
+      mostrarObjetivo(m, "Un \"ta\" corto, justo en la nota");
+      fijarEstado("Escuchá…");
+      await motor.tocar(m, 1000);
+      await esperar(350);
+      fijarEstado("¡Ta!", true);
+      ocultarAguja(true);
+      const DUR = 700;
+      const r = await capturar(DUR, 7000);
+      ocultarAguja(false);
+      if (!r) return null;
+      const puntos = r.frames.map((p) => ({ ms: p.ms, c: centsPlegados(p.hz, m) }));
+      const inicio = mediana(puntos.filter((p) => p.ms <= 60).map((p) => p.c));
+      if (isNaN(inicio)) return { invalido: "No llegué a escuchar el arranque. Probá un \"ta\" un poco más fuerte." };
+      let llegada = null;
+      for (let i = 0; i + 2 < puntos.length; i++) {
+        if (puntos.slice(i, i + 3).every((p) => Math.abs(p.c) <= 25)) { llegada = puntos[i].ms; break; }
+      }
+      dibujarRastro(lienzo, puntos, { duracionMs: DUR, ventana: [0, 60] });
+      let texto;
+      if (Math.abs(inicio) <= 25) texto = `<b>Entrada limpia.</b> Arrancaste a ${redondo(inicio)} del centro.`;
+      else texto = `Arrancaste <b>${redondo(inicio)} ${lado(inicio)}</b>` + (llegada !== null ? ` y tardaste ${Math.round(llegada)} ms en llegar.` : " y no llegaste al centro.");
+      return { objetivo: m, c: inicio, texto };
+    },
+  },
+  {
+    id: "puntas", num: "4", titulo: "Graves y agudos",
+    corrige: "En los graves te quedás arriba y en los agudos no llegás.",
+    consejo: "Grave: dejate caer hasta el fondo de la nota. Agudo: apuntá un poquito más arriba de lo que sentís. Si una nota no te sale, no fuerces.",
+    async intento(prev, i) {
+      const grave = i % 2 === 0;
+      let m;
+      do { m = azar(grave ? GRAVES : AGUDOS); } while (prev && m === prev.objetivo);
+      mostrarObjetivo(m, grave ? "Grave: bajá del todo" : "Agudo: llegá arriba");
+      return tiroSobre(m, grave ? "grave" : "agudo");
+    },
+  },
+];
+
+// Tiro de una nota: referencia, silencio, cantás. Cuenta cómo entrás (50 a 200 ms).
+async function tiroSobre(m, zona) {
+  fijarEstado("Escuchá…");
+  await motor.tocar(m, 1200);
+  await esperar(400);
+  fijarEstado("¡Cantá!", true);
+  ocultarAguja(true);
+  const DUR = 1400;
+  const r = await capturar(DUR, 7000, (ms, f) => { if (ms > 250 && f.voz) { ocultarAguja(false); moverAguja(centsPlegados(f.hz, m)); } });
+  ocultarAguja(false);
+  if (!r) return null;
+  const puntos = r.frames.map((p) => ({ ms: p.ms, c: centsPlegados(p.hz, m) }));
+  const entrada = mediana(puntos.filter((p) => p.ms >= 50 && p.ms <= 200).map((p) => p.c));
+  const asentada = mediana(puntos.filter((p) => p.ms >= 600).map((p) => p.c));
+  if (isNaN(entrada)) return { invalido: "No llegué a escuchar la entrada. Cantá un poco más fuerte y sostené la nota." };
+  dibujarRastro(lienzo, puntos, { duracionMs: DUR, ventana: [50, 200] });
+  let texto;
+  if (Math.abs(entrada) > 250) texto = `Cantaste otra nota (${redondo(entrada)} ${lado(entrada)}). Escuchá de nuevo con calma.`;
+  else if (Math.abs(entrada) <= 25) texto = `<b>¡Adentro!</b> Entraste a ${redondo(entrada)} del centro.`;
+  else {
+    texto = `Entraste <b>${redondo(entrada)} ${lado(entrada)}</b>.`;
+    if (!isNaN(asentada) && Math.abs(asentada) + 10 < Math.abs(entrada)) texto += ` Después la acomodaste a ${redondo(asentada)}: tu oído funciona, ahora que salga de entrada.`;
+  }
+  if (zona === "grave" && entrada > 25) texto += " En los graves te quedás arriba: dejate caer.";
+  if (zona === "agudo" && entrada < -25) texto += " En los agudos no llegás: apuntá un poco más arriba.";
+  return { objetivo: m, c: entrada, texto };
+}
+
+/* ---------- Pantallas ---------- */
+const $ = (id) => document.getElementById(id);
+const lienzo = $("rastro");
+const PANTALLAS = ["inicio", "ejercicio", "afinador", "progreso"];
+function ir(p) { PANTALLAS.forEach((x) => ($(x).hidden = x !== p)); window.scrollTo(0, 0); }
+
+function fijarEstado(t, canta = false) { $("estado").textContent = t; $("estado").classList.toggle("canta", canta); }
+function mostrarObjetivo(m, detalle) { $("notaObjetivo").textContent = nombreNota(m); $("detalleObjetivo").textContent = detalle; }
+function moverAguja(c, id = "aguja") {
+  const el = $(id);
+  el.classList.remove("apagada");
+  el.style.left = 50 + Math.max(-50, Math.min(50, c)) + "%";
+}
+function ocultarAguja(si) { $("velo").hidden = !si; }
+
+function pintarInicio() {
+  const h = historial().filter((r) => diaLocal(r.fecha) === diaLocal(Date.now()));
+  const hechos = new Set(h.map((r) => r.ej));
+  $("hechosHoy").textContent = hechos.size ? `Hoy hiciste ${hechos.size} de 4` : "";
+  $("listaEjercicios").innerHTML = "";
+  for (const e of EJERCICIOS) {
+    const b = document.createElement("button");
+    b.className = "tarjeta";
+    const ult = historial().filter((r) => r.ej === e.id).slice(-1)[0];
+    b.innerHTML = `<span class="num">EJERCICIO ${e.num}</span><h3>${e.titulo}</h3><p class="chico">${e.corrige}</p>` +
+      (ult ? `<span class="hecho">Última ronda: ${ult.aciertos} de ${ult.total}${hechos.has(e.id) ? " · hecho hoy" : ""}</span>` : "");
+    b.addEventListener("click", () => empezar(e));
+    $("listaEjercicios").appendChild(b);
+  }
+}
+
+function micListo() { return !!motor.ctx; }
+function pedirMic() {
+  if (micListo()) return true;
+  ir("inicio");
+  $("errorMic").hidden = false;
+  $("errorMic").textContent = "Primero tocá \"Activar micrófono\".";
+  return false;
+}
+
+/* ---------- Ronda de un ejercicio ---------- */
+async function empezar(e) {
+  if (!pedirMic()) return;
+  corrida.cancelada = true;
+  corrida = { cancelada: false };
+  const yo = corrida;
+  ir("ejercicio");
+  $("panelIntento").hidden = false;
+  $("panelResumen").hidden = true;
+  $("ejNumero").textContent = "Ejercicio " + e.num;
+  $("ejTitulo").textContent = e.titulo;
+  $("ejConsejo").textContent = e.consejo;
+  $("resultado").innerHTML = "";
+  $("aguja").classList.add("apagada");
+  const TOTAL = 10;
+  const resultados = [];
+  const pintarPuntos = () => {
+    $("puntos").innerHTML = "";
+    for (let i = 0; i < TOTAL; i++) {
+      const d = document.createElement("span");
+      d.className = "punto" + (resultados[i] ? " " + clase(resultados[i].c) : i === resultados.length ? " actual" : "");
+      $("puntos").appendChild(d);
+    }
+  };
+  pintarPuntos();
+  dibujarRastro(lienzo, [], { duracionMs: 1400 });
+  try {
+    let prev = null, silencios = 0;
+    while (resultados.length < TOTAL) {
+      const r = await e.intento(prev, resultados.length);
+      if (r === null) {
+        silencios++;
+        fijarEstado("No te escuché");
+        $("resultado").textContent = silencios >= 2 ? "Revisá que el micrófono esté conectado y cerca. Vuelvo a tocar la nota." : "Vuelvo a tocar la nota.";
+        await esperar(1600);
+        continue;
+      }
+      silencios = 0;
+      if (r.invalido) { fijarEstado("Otra vez"); $("resultado").textContent = r.invalido; await esperar(2200); continue; }
+      resultados.push(r);
+      prev = r;
+      fijarEstado(clase(r.c) === "ok" ? "Bien" : clase(r.c) === "casi" ? "En el borde" : "Se nota");
+      $("resultado").innerHTML = r.texto;
+      pintarPuntos();
+      await esperar(2600);
+    }
+  } catch (err) {
+    if (err instanceof Cancelado) return;
+    throw err;
+  }
+  if (yo.cancelada) return;
+  terminarRonda(e, resultados);
+}
+
+function terminarRonda(e, resultados) {
+  const aciertos = resultados.filter((r) => clase(r.c) === "ok").length;
+  const promedio = resultados.reduce((s, r) => s + r.c, 0) / resultados.length;
+  const anteriores = historial().filter((r) => r.ej === e.id);
+  guardarRonda({ fecha: new Date().toISOString(), ej: e.id, aciertos, total: resultados.length, promedio: Math.round(promedio), detalle: resultados.map((r) => [r.objetivo, Math.round(r.c)]) });
+  $("panelIntento").hidden = true;
+  $("panelResumen").hidden = false;
+  $("resAciertos").textContent = `${aciertos} de ${resultados.length}`;
+  const ant = anteriores.slice(-1)[0];
+  $("resTexto").textContent = ant ? `La vez anterior: ${ant.aciertos} de ${ant.total}.` : "Primera ronda: esta es tu marca para superar.";
+  let consejo;
+  if (aciertos >= 8) consejo = "Nivel de cantante afinado en este ejercicio. Mantenelo unos días seguidos antes de darlo por ganado.";
+  else if (Math.abs(promedio) >= 12) consejo = e.id === "paso"
+    ? `Tus pasos tienden a salir ${promedio > 0 ? "más grandes" : "más chicos"} de lo que deberían (${redondo(promedio)} en promedio). Exagerá un poco para el otro lado.`
+    : `Tendencia: entrás ${redondo(promedio)} ${lado(promedio)} en promedio. Apuntá un poquito más ${promedio < 0 ? "arriba" : "abajo"}.`;
+  else consejo = "No tenés una tendencia fija: los errores van para los dos lados. Antes de cada tiro, escuchá la nota por dentro un segundo más.";
+  $("resConsejo").textContent = consejo;
+  $("btnOtra").onclick = () => empezar(e);
+}
+
+/* ---------- Afinador libre ---------- */
+let rastroLibre = [];
+let centroRollo = 57;
+function oyenteLibre(f) {
+  const ahora = f.t;
+  if (f.voz) {
+    const m = hzAMidi(f.hz), cerca = Math.round(m), c = (m - cerca) * 100;
+    rastroLibre.push({ t: ahora, m });
+    $("libreNota").textContent = nombreNota(cerca);
+    $("libreCents").textContent = (c >= 0 ? "+" : "−") + redondo(c);
+    $("libreCents").style.color = css(clase(c) === "ok" ? "--ok" : clase(c) === "casi" ? "--warn" : "--bad");
+    moverAguja(c, "libreAguja");
+    centroRollo += (m - centroRollo) * 0.05;
+  } else {
+    $("libreAguja").classList.add("apagada");
+  }
+  rastroLibre = rastroLibre.filter((p) => ahora - p.t < 6000);
+  dibujarRollo(ahora);
+}
+function dibujarRollo(ahora) {
+  const cv = $("rollo");
+  const { g, w, h } = prepararCanvas(cv);
+  const izq = 44, medio = Math.round(centroRollo), lo = medio - 5, hi = medio + 5;
+  const Y = (m) => h - ((m - lo) / (hi - lo)) * h;
+  const X = (t) => izq + (1 - (ahora - t) / 6000) * (w - izq);
+  g.clearRect(0, 0, w, h);
+  g.font = "12px " + css("--body");
+  for (let m = lo; m <= hi; m++) {
+    g.strokeStyle = css("--line");
+    g.lineWidth = 1;
+    g.beginPath(); g.moveTo(izq, Y(m)); g.lineTo(w, Y(m)); g.stroke();
+    g.fillStyle = css("--muted");
+    g.textAlign = "right";
+    g.fillText(nombreNota(m), izq - 6, Y(m) + 4);
+  }
+  for (const p of rastroLibre) {
+    const c = (p.m - Math.round(p.m)) * 100;
+    g.fillStyle = css(clase(c) === "ok" ? "--ok" : clase(c) === "casi" ? "--warn" : "--bad");
+    g.beginPath(); g.arc(X(p.t), Y(p.m), 2.4, 0, Math.PI * 2); g.fill();
+  }
+}
+
+/* ---------- Progreso ---------- */
+function pintarProgreso() {
+  const h = historial();
+  const cont = $("tablasProgreso");
+  cont.innerHTML = "";
+  for (const e of EJERCICIOS) {
+    const rs = h.filter((r) => r.ej === e.id).slice(-10).reverse();
+    const p = document.createElement("div");
+    p.className = "panel";
+    let html = `<h2>${e.num} · ${e.titulo}</h2>`;
+    if (!rs.length) html += `<p class="chico">Todavía no hiciste ninguna ronda.</p>`;
+    else {
+      html += `<div style="overflow-x:auto"><table class="tabla"><thead><tr><th>Día</th><th>Aciertos</th><th></th><th>Tendencia</th></tr></thead><tbody>`;
+      for (const r of rs) {
+        const dia = new Date(r.fecha).toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+        const tend = Math.abs(r.promedio) < 12 ? "pareja" : e.id === "paso" ? (r.promedio > 0 ? "pasos grandes" : "pasos cortos") : `${Math.abs(r.promedio)} ${lado(r.promedio)}`;
+        html += `<tr><td>${dia}</td><td>${r.aciertos} de ${r.total}</td><td style="width:40%"><div class="barrita"><i style="width:${(r.aciertos / r.total) * 100}%"></i></div></td><td>${tend}</td></tr>`;
+      }
+      html += `</tbody></table></div>`;
+    }
+    p.innerHTML = html;
+    cont.appendChild(p);
+  }
+}
+
+/* ---------- Botones ---------- */
+$("btnMic").addEventListener("click", async () => {
+  $("errorMic").hidden = true;
+  try {
+    await motor.iniciar();
+    try { await navigator.wakeLock?.request("screen"); } catch { /* la pantalla se puede apagar sola: no pasa nada */ }
+    $("estadoMic").textContent = "Micrófono listo";
+    $("estadoMic").classList.add("on");
+    $("panelMic").hidden = true;
+  } catch (err) {
+    $("errorMic").hidden = false;
+    $("errorMic").textContent = "No pude usar el micrófono. En la compu abrilo con Google Chrome; en el iPhone, con Safari. Tocá Permitir cuando te pregunte (si ya dijiste que no, cerrá la página y abrila de nuevo).";
+  }
+});
+const salir = () => { corrida.cancelada = true; motor.oyentes.delete(oyenteLibre); pintarInicio(); ir("inicio"); };
+$("btnSalir").addEventListener("click", salir);
+$("btnVolver").addEventListener("click", salir);
+$("btnSalirAfinador").addEventListener("click", salir);
+$("btnSalirProgreso").addEventListener("click", salir);
+$("btnAfinador").addEventListener("click", () => {
+  if (!pedirMic()) return;
+  rastroLibre = [];
+  ir("afinador");
+  motor.oyentes.add(oyenteLibre);
+});
+$("btnProgreso").addEventListener("click", () => { pintarProgreso(); ir("progreso"); });
+
+pintarInicio();
+window.__entrenador = { detectarAltura, centsPlegados, motor };
+</script>
+</body>
+</html>
